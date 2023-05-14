@@ -1,0 +1,171 @@
+#!/bin/bash
+
+## Script variables
+SCRIPT_NAME="mah"
+VERSION=0.0.3
+DESCRIPTION="Minimal AUR downloader."
+DATE_OF_CREATION=2022-05-13
+DATE_OF_EDIT=2022-05-13
+readonly SCRIPT_NAME VERSION DESCRIPTION DATE_OF_CREATION DATE_OF_EDIT
+
+## Constants
+#AUR Link.
+AUR="https://aur.archlinux.org/"
+#Default text editor (used for -a)
+EDITOR=less
+#Package download directory.
+DOWNLOAD_DIR=$HOME/downloads
+if [ ! -d $DOWNLOAD_DIR ]
+then
+   DOWNLOAD_DIR=/tmp
+fi
+   
+readonly AUR DOWNLOAD_DIR
+
+## Working variables
+#Self explanatory
+verbose=0
+#Tracks if the package's folder should be deleted or not.
+del_folder=1
+#Whether or not to skip all confirmations.
+no_confirm=0
+#Should you audit the PKGBUILD?
+should_audit=0
+
+## Function
+# Name: version
+# Description: Prints current version info.
+version () {
+    printf "Name: %s
+Version: %s
+Description: %s
+Date of creation: %s
+Date of edit: %s\n" "$SCRIPT_NAME" "$VERSION" "$DESCRIPTION" "$DATE_OF_CREATION" "$DATE_OF_EDIT" 
+}
+
+## Function
+# Name: usage
+# Description: prints the proper usage switches, purpose of the script, etc.
+use () {
+    printf "%s - %s
+    A simple AUR downloader. Nothing else.
+
+    Usage:
+	%s <packages>...
+	%s [options] [<packages>]...
+
+    Options:
+	-h, --help			Displays this message.
+	-v, --verbose			Be move verbose.
+	-a, --audit			Allows you to view the PKGBUILD before installation.
+	-k, --keep			Keeps the installed packages folder after installation.
+	-v, --version			Prints the version information and quits.
+	-y  				Bypasses any required confirmation, aside from password input.
+" "$SCRIPT_NAME" "$VERSION" "$SCRIPT_NAME" "$SCRIPT_NAME"
+}
+
+## Function
+# Name: confirmation
+# Description: checks for description, doesn't quit until a correct input is given.
+confirmation () {
+    while true
+    do
+	read -r -p "Continue with installation? [Y/n] " input
+	case $input in
+	    [yY][eE][sS]|[yY])
+		break
+		;;
+	    [nN][oO]|[nN])
+		exit 0
+		;;
+	    *)
+	        ;;
+	esac
+    done
+}
+
+while true; do
+    case $1 in
+	-a|--audit)
+	    should_audit=1
+	    shift
+	    ;;
+        -h|--help)
+            use
+            exit 0
+            ;;
+        -v|--verbose)
+            verbose=1
+            shift
+            ;;
+	-k|--keep)
+	    del_folder=0
+	    shift
+	    ;;
+        -v|--version)
+            version
+            exit 0
+            ;;
+	-y)
+	    no_confirm=1
+	    shift
+	    ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            error "Unknown option: $1"
+	    use
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+#git_switch is for the optional quiet command in git
+#used in conjunction with -v
+#STDOUT_out is used later to determine where STDOUT should go
+#used in conjunction with -v
+case $verbose in
+    0)
+	git_switch="-q"
+	STDOUT_out=0
+	;;
+    1)
+	git_switch=""
+	STDOUT_out=1
+	;;
+esac
+
+confirm=""
+if [ $no_confirm -eq 1 ]
+then
+    confirm="--noconfirm"
+fi
+
+for x in $@
+do
+    command cd "$DOWNLOAD_DIR"
+    command git clone $git_switch "$AUR$x"
+    command cd $x
+    if [ $should_audit -eq 1 ]
+    then
+	command $EDITOR PKGBUILD
+	confirmation
+    fi
+    if [ $STDOUT_out -eq 0 ]
+    then	
+	command makepkg -si $confirm --needed > /dev/null
+    else
+	command makepkg -si $confirm --needed
+    fi
+    command cd ../
+    if [ $del_folder -eq 1 ]
+    then
+	command rm -rf $x
+    fi
+done
+exit 0
